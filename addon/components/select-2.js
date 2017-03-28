@@ -42,15 +42,20 @@ var Select2Component = Ember.Component.extend({
   placeholder: null,
   multiple: false,
   allowClear: false,
+  selectOnBlur: false,
+  createSearchChoicePosition: 'bottom',
   enabled: true,
   query: null,
   typeaheadSearchingText: 'Searching…',
   typeaheadNoMatchesText: 'No matches found',
+  typeaheadCreateNewElementText: 'Start typing to create',
   typeaheadErrorText: 'Loading failed',
   searchEnabled: true,
   minimumInputLength: null,
   maximumInputLength: null,
   valueSeparator: ',',
+  allowNewOption: false,
+
 
   // internal state
   _hasSelectedMissingItems: false,
@@ -81,6 +86,9 @@ var Select2Component = Ember.Component.extend({
     options.minimumResultsForSearch = this.get('searchEnabled') ? 0 : -1 ;
     options.minimumInputLength = this.get('minimumInputLength');
     options.maximumInputLength = this.get('maximumInputLength');
+    options.selectOnBlur = this.get('selectOnBlur');
+    options.createSearchChoicePosition = this.get('createSearchChoicePosition');
+
 
     // ensure there is a value separator if needed (= when in multiple selection with value binding)
     var missesValueSeperator = this.get('multiple') && this.get('optionValuePath') && !this.get('valueSeparator');
@@ -151,6 +159,43 @@ var Select2Component = Ember.Component.extend({
       // escape text unless it's passed as a Handlebars.SafeString
       return Ember.Handlebars.Utils.escapeExpression(text);
     };
+
+    if (self.allowNewOption) {
+
+      options.createSearchChoice = function(term, data) {
+
+        let label = optionLabelSelectedPath || optionLabelPath;
+
+        var filterFunction = function myFilterFunction() {
+
+          let text = get(this, label);
+          let children = get(this, 'children');
+
+          if (children) {
+            // grouped values
+            let titleText = get(this, 'text');
+            let foundInChildren = $(children).filter(filterFunction).length === 0;
+            return titleText.localeCompare(term) === 0 || foundInChildren;
+          }
+          else {
+            if (text instanceof Ember.Handlebars.SafeString) {
+              text = text.toString();
+            }
+            return text.localeCompare(term) === 0;
+          }
+        }
+
+        if ($(data).filter(filterFunction).length === 0) {
+          let newChoice = {
+            isNew: true,
+            id: term
+          }
+          newChoice[label] = term;
+          return newChoice;
+        }
+      };
+
+    }
 
     /*
       Provides a list of items that should be displayed for the current query
@@ -240,8 +285,11 @@ var Select2Component = Ember.Component.extend({
      */
     options.formatNoMatches = function(term) {
       var text = self.get('typeaheadNoMatchesText');
+      if (self.allowNewOption) {
+        text = self.get('typeaheadCreateNewElementText');
+      }
       if (text instanceof Ember.Handlebars.SafeString) {
-        text = text.string;
+        text = text.toString();
       }
 
       term = Ember.Handlebars.Utils.escapeExpression(term);
@@ -382,10 +430,17 @@ var Select2Component = Ember.Component.extend({
     this._select = this.$().select2(options);
 
     this._select.on("change", run.bind(this, function() {
+
       // grab currently selected data from select plugin
       var data = this._select.select2("data");
-      // call our callback for further processing
-      this.selectionChanged(data);
+
+      if (self.allowNewOption && typeof data.isNew !== 'undefined' && typeof data.label !== 'undefined' && data.isNew === true) {
+        this.addNewOption(data.label)
+      }
+      else {
+        // call our callback for further processing
+        this.selectionChanged(data);
+      }
     }));
 
     this.addObserver('content.[]', this.valueChanged);
@@ -473,12 +528,19 @@ var Select2Component = Ember.Component.extend({
     });
   },
 
+  addNewOption: function(label) {
+    Ember.run.schedule('actions', this, function() {
+      this.sendAction('didCreateNewOption', label, this);
+    });
+  },
+
   /**
    * Respond to external value changes. If select2 is working with full objects,
    * use the "data" API, otherwise just set the "val" property and let the
    * "initSelection" figure out which object was meant by that.
    */
   valueChanged: function() {
+
     var self = this,
         value = this.get("value"),
         optionValuePath = this.get("optionValuePath");
