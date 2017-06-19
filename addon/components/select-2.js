@@ -41,6 +41,7 @@ var Select2Component = Ember.Component.extend({
   optionDescriptionPath: 'description',
   placeholder: null,
   multiple: false,
+  defaultLanguage: 'en_US',
   allowClear: false,
   selectOnBlur: false,
   createSearchChoicePosition: 'bottom',
@@ -49,12 +50,14 @@ var Select2Component = Ember.Component.extend({
   typeaheadSearchingText: 'Searching…',
   typeaheadNoMatchesText: 'No matches found',
   typeaheadCreateNewElementText: 'Start typing to create',
+  typeaheadCreateNewElementDescriptionText: 'Click Enter to create [[placeholder]].',
   typeaheadErrorText: 'Loading failed',
   searchEnabled: true,
   minimumInputLength: null,
   maximumInputLength: null,
   valueSeparator: ',',
   allowNewOption: false,
+  createNewHighlightClass: null,
 
 
   // internal state
@@ -170,18 +173,19 @@ var Select2Component = Ember.Component.extend({
 
           let text = get(this, label);
           let children = get(this, 'children');
+          let language = navigator.language || this.get('defaultLanguage');
 
           if (children) {
             // grouped values
             let titleText = get(this, 'text');
             let foundInChildren = $(children).filter(filterFunction).length === 0;
-            return titleText.localeCompare(term) === 0 || foundInChildren;
+            return titleText.localeCompare(term, language, {sensitivity:'base'}) === 0 || foundInChildren;
           }
           else {
             if (text instanceof Ember.Handlebars.SafeString) {
               text = text.toString();
             }
-            return text.localeCompare(term) === 0;
+            return text.localeCompare(term, language, {sensitivity:'base'}) === 0;
           }
         }
 
@@ -190,7 +194,25 @@ var Select2Component = Ember.Component.extend({
             isNew: true,
             id: term
           }
-          newChoice[label] = term;
+          if(data.length === 0) {
+            let description = self.get('typeaheadCreateNewElementDescriptionText');
+            if (description instanceof Ember.Handlebars.SafeString) {
+              description = description.toString();
+            }
+            newChoice[label] = description.replace('[[placeholder]]', term);
+            if(self.get('createNewHighlightClass')) {
+              Ember.run.later(() => {
+                $(".select2-highlighted").addClass(self.get('createNewHighlightClass'));
+              });
+            }
+          } else {
+            newChoice[label] = term;
+            if(self.get('createNewHighlightClass')) {
+              Ember.run.later(() => {
+                $(".select2-highlighted").removeClass(self.get('createNewHighlightClass'))
+              });
+            }
+          }
           return newChoice;
         }
       };
@@ -433,9 +455,10 @@ var Select2Component = Ember.Component.extend({
 
       // grab currently selected data from select plugin
       var data = this._select.select2("data");
-
-      if (self.allowNewOption && typeof data.isNew !== 'undefined' && typeof data.label !== 'undefined' && data.isNew === true) {
-        this.addNewOption(data.label)
+      let label = optionLabelSelectedPath || optionLabelPath;
+      
+      if (self.allowNewOption && typeof data.isNew !== 'undefined' && typeof data[label] !== 'undefined' && data.isNew === true) {
+        this.addNewOption(data.id)
       }
       else {
         // call our callback for further processing
