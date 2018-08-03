@@ -456,13 +456,23 @@ var Select2Component = Ember.Component.extend({
       // grab currently selected data from select plugin
       var data = this._select.select2("data");
       let label = optionLabelSelectedPath || optionLabelPath;
-      
-      if (self.allowNewOption && typeof data.isNew !== 'undefined' && typeof data[label] !== 'undefined' && data.isNew === true) {
-        this.addNewOption(data.id)
-      }
-      else {
-        // call our callback for further processing
-        this.selectionChanged(data);
+      if(this.get('multiple')) {
+        let createdElements = data.filter(el => typeof el.isNew !== 'undefined' && typeof el[label] !== 'undefined' && el.isNew === true );
+        if (self.allowNewOption && createdElements && createdElements.length > 0) {
+          this.addNewOption(createdElements)
+        }
+        else {
+          // call our callback for further processing
+          this.selectionChanged(data);
+        }
+      } else {
+        if (self.allowNewOption && typeof data.isNew !== 'undefined' && typeof data[label] !== 'undefined' && data.isNew === true) {
+          this.addNewOption(data.id)
+        }
+        else {
+          // call our callback for further processing
+          this.selectionChanged(data);
+        }
       }
     }));
 
