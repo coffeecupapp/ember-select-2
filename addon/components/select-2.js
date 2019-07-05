@@ -475,6 +475,14 @@ var Select2Component = Ember.Component.extend({
         }
       }
     }));
+    
+    this._select.on("select2-opening", run.bind(this, function() {
+      this.sendAction('onOpen');
+    }));
+
+    this._select.on("select2-close", run.bind(this, function() {
+      this.sendAction('onClose');
+    }));
 
     this.addObserver('content.[]', this.valueChanged);
     this.addObserver('content.@each.' + optionLabelPath, this.valueChanged);
